@@ -1,0 +1,25 @@
+services:
+  bot-middleware:
+    build: .
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+    environment:
+      - TOKEN_ESPERADO=RLjUoIUiajoI8Ss33WATbH3-KDhIkpAlNUmPjDIhQ7k
+      - FRESHCHAT_API_TOKEN=eyJraWQiOiJjdXN0b20tb2F1dGgta2V5aWQiLCJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmcmVzaGNoYXQiLCJhdWQiOiJmcmVzaGNoYXQiLCJpYXQiOjE3NDYwMjM1NDYsInNjb3BlIjoiYWdlbnQ6cmVhZCBhZ2VudDpjcmVhdGUgYWdlbnQ6dXBkYXRlIGFnZW50OmRlbGV0ZSBjb252ZXJzYXRpb246Y3JlYXRlIGNvbnZlcnNhdGlvbjpyZWFkIGNvbnZlcnNhdGlvbjp1cGRhdGUgbWVzc2FnZTpjcmVhdGUgbWVzc2FnZTpnZXQgYmlsbGluZzp1cGRhdGUgcmVwb3J0czpmZXRjaCByZXBvcnRzOmV4dHJhY3QgcmVwb3J0czpyZWFkIHJlcG9ydHM6ZXh0cmFjdDpyZWFkIGFjY291bnQ6cmVhZCBkYXNoYm9hcmQ6cmVhZCB1c2VyOnJlYWQgdXNlcjpjcmVhdGUgdXNlcjp1cGRhdGUgdXNlcjpkZWxldGUgb3V0Ym91bmRtZXNzYWdlOnNlbmQgb3V0Ym91bmRtZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6bWVzc2FnZTpzZW5kIG1lc3NhZ2luZy1jaGFubmVsczp0ZW1wbGF0ZTpnZXQgZmlsdGVyaW5ib3g6cmVhZCBmaWx0ZXJpbmJveDpjb3VudDpyZWFkIHJvbGU6cmVhZCBpbWFnZTp1cGxvYWQiLCJ0eXAiOiJCZWFyZXIiLCJjbGllbnRJZCI6ImZjLWM4NzhiNmU0LTZkMTktNDE1NC1hMzcxLWQ4YzFjMjQ0NmJlNiIsInN1YiI6IjlmZDY4OGFjLTUwNTItNDg3Ny04NGY4LTZiNGU5MjY2NmU1NCIsImp0aSI6ImJkZDliMTkwLWQ5MTQtNDY1MC1iZWFhLTJhNmRmYjM4MmEwNiIsImV4cCI6MjA2MTU1NjM0Nn0.RmspATxlyZ5oejTDo3A6X3yDZttfsegrkgBa61yXahY
+      - FRESHCHAT_BASE_URL=https://api.freshchat.com/v2
+      - GEMINI_API_KEY=AIzaSyA4k29eNZ4SfldKWu8HuRUnT8hucQ_FWso
+      - MAX_REQUESTS_PER_MINUTE=60
+    env_file:
+      - .env
+    volumes:
+      - ./historicos:/app/historicos
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 1h
+      timeout: 10s
+      retries: 3
+      start_period: 40s 

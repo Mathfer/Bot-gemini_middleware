@@ -1,0 +1,11 @@
+{"solicitante": "teste1", "url": "https://exemplo.com/2312341", "contexto": "teste", "pergunta": "teste"}
+{"solicitante": "teste3", "url": "https://exemplo.com/231234232341", "contexto": "teste", "pergunta": "teste"}
+{"url": "1teste2 teste 3 teste 4 teste", "solicitante": "teste , teste e teste", "contexto": "teste", "pergunta": "teste"}
+{"url": "154a1aaec-bcd4-4ad3-96f0-92e9876cbf552  3  4 https://claracloud-support.freshbots.ai/bot-builder/bots/784015/version/1288751/flows/10658290", "solicitante": "Teste ,  e ", "contexto": "Tive esta duvida reset de senha sobre esta aplicaçãoAWS", "pergunta": "reset de senha"}
+{"id_usuario": "1774e3711-140f-470e-aca6-801fcce5cf1e ", "solicitante": "Testematheus", "contexto": "Tive esta duvida reset de senha sobre esta aplicaçãoAWS", "pergunta": "reset de senha"}
+{"id_usuario": "1232412rweweas", "solicitante": "Teste", "contexto": "teste", "pergunta": "reset de senha"}
+{"id_usuario": "1teste ", "solicitante": "teste", "contexto": "teste", "pergunta": "teste"}
+{"id_usuario": "1teste ", "solicitante": "teste", "contexto": "teste", "pergunta": "teste"}
+{"id_usuario": "1teste ", "solicitante": "teste", "contexto": "teste", "pergunta": "teste"}
+{"id_usuario": "1f9fd54b5-3fed-4de2-ad31-13e1595b9fa9 ", "solicitante": "Teste", "contexto": "Tive esta duvida reset de senha sobre esta aplicaçãoAWS", "pergunta": "reset de senha"}
+{"id_usuario": "1f9fd54b5-3fed-4de2-ad31-13e1595b9fa9 ", "solicitante": "Testematheusbot", "contexto": "Tive esta duvida teste sobre esta aplicaçãoAWS", "pergunta": "teste"}
