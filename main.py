@@ -100,15 +100,26 @@ performance_metrics = {
 
 # Configuração do cliente Gemini
 if GEMINI_API_KEY:
-    if HAS_GENERATIVE_MODEL:
-        client = GenerativeModel("gemini-2.5-flash", api_key=GEMINI_API_KEY)
-        logger.info("[SETUP] Cliente Gemini configurado com GenerativeModel!")
-    elif HAS_CLIENT:
-        client = Client(api_key=GEMINI_API_KEY)
-        logger.info("[SETUP] Cliente Gemini configurado com Client!")
-    else:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        generation_config = {
+            "temperature": 0.4,
+            "top_k": 20,
+            "top_p": 0.8,
+            "max_output_tokens": 2048,
+        }
+        client = genai.GenerativeModel(model_name="gemini-pro",
+                                     generation_config=generation_config)
+        # Teste inicial para verificar se o cliente está funcionando
+        response = client.generate_content("Teste de conexão")
+        if response and hasattr(response, 'text'):
+            logger.info("[SETUP] Cliente Gemini configurado e testado com sucesso!")
+        else:
+            logger.error("[SETUP] Cliente Gemini configurado mas teste falhou")
+            client = None
+    except Exception as e:
+        logger.error(f"[SETUP] Erro ao configurar cliente Gemini: {e}")
         client = None
-        logger.error("[SETUP] Nenhuma classe compatível encontrada para o Gemini!")
 else:
     client = None
     logger.warning("[SETUP] GEMINI_API_KEY não definida. A integração com Gemini não funcionará.")
@@ -121,14 +132,11 @@ if not FRESHCHAT_API_TOKEN:
 # MODELOS
 # =====================
 class DadosRecebidos(BaseModel):
-    solicitante: str = Field(default="desconhecido", max_length=100)
-    contexto: str = Field(default="", max_length=2000)
-    pergunta: str = Field(default="", max_length=1000)
-    user_id: str = Field(default="", max_length=50)
-    id_usuario: str = Field(default="", max_length=50)
-    id_conversa: str = Field(default="", max_length=50)
+    solicitante: str = Field(..., max_length=100)  # Campo obrigatório
+    contexto: str = Field(..., max_length=2000)    # Campo obrigatório
+    pergunta: str = Field(..., max_length=1000)    # Campo obrigatório
     resposta_gemini: str = Field(default="", max_length=4000)
-    url: str = Field(default="", max_length=500)
+    search_id: str = Field(default="", max_length=50)
     
     @field_validator('solicitante', 'contexto', 'pergunta', 'user_id', 'id_usuario', 'id_conversa', 'resposta_gemini', 'url')
     @classmethod
@@ -287,10 +295,14 @@ async def consultar_gemini(dados):
     
     try:
         logger.info("[GEMINI] Iniciando consulta ao Gemini...")
+        logger.info(f"[GEMINI] Dados recebidos para processamento: {json.dumps(dados, ensure_ascii=False, indent=2)}")
         
         # Preparar o prompt para o Gemini
         contexto = dados.get('contexto', '')
         pergunta = dados.get('pergunta', '')
+        
+        logger.info(f"[GEMINI] Contexto extraído: {contexto}")
+        logger.info(f"[GEMINI] Pergunta extraída: {pergunta}")
         
         if not pergunta:
             logger.warning("[GEMINI] Nenhuma pergunta fornecida")
@@ -306,7 +318,7 @@ Se a pergunta do usuário for um pedido de ajuda (ex: 'algo não funciona', 'est
 - Se o usuário diz 'Meu app está lento', pergunte: 'Claro, vamos investigar! Você notou se a lentidão ocorre em horários específicos ou após alguma ação?'
 - Se o usuário diz 'Não consigo conectar ao banco de dados', sugira: 'Ok, vamos verificar alguns pontos. Você pode confirmar se as credenciais estão corretas e se o IP da aplicação tem permissão de acesso?'
 
-Recuse educadamente perguntas fora do escopo de SaaS, IaaS ou PaaS. Presuma que as permissões necessárias já foram concedidas. Mantenha a linguagem simples e amigável e não utilise este caracter '*' para deixar em negrito, utilize '<b> texto em negrito </b>'. Use este contexto: ${{custom::2375366}}"""
+Recuse educadamente perguntas fora do escopo de SaaS, IaaS ou PaaS. Presuma que as permissões necessárias já foram concedidas. Mantenha a linguagem simples e amigável e não utilise este caracter '*' para deixar em negrito, utilize '<b> texto em negrito </b>'"""
         
         user_content = f"Contexto: {contexto}\n\nPergunta: {pergunta}"
         
@@ -314,34 +326,17 @@ Recuse educadamente perguntas fora do escopo de SaaS, IaaS ou PaaS. Presuma que 
         start_time = datetime.datetime.now()
         
         try:
-            if hasattr(client, 'generate_content'):
-                # Para GenerativeModel
-                response = client.generate_content(
-                    f"{system_instruction}\n\n{user_content}",
-                    generation_config={
-                        "temperature": 0.4,
-                        "top_k": 20,
-                        "top_p": 0.8,
-                        "max_output_tokens": 2048
-                    }
-                )
-            else:
-                # Para Client (versão antiga)
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=[
-                        {
-                            "role": "user",
-                            "parts": [{"text": f"{system_instruction}\n\n{user_content}"}]
-                        }
-                    ],
-                    generation_config={
-                        "temperature": 0.4,
-                        "top_k": 20,
-                        "top_p": 0.8,
-                        "max_output_tokens": 2048
-                    }
-                )
+            logger.info("[GEMINI] Preparando conteúdo para envio...")
+            contents = [
+                {"role": "user", "parts": [{"text": system_instruction}]},
+                {"role": "model", "parts": [{"text": "Entendi. Vou atuar como atendente da Multiclara e ajudar com questões de SaaS, IaaS e PaaS."}]},
+                {"role": "user", "parts": [{"text": user_content}]}
+            ]
+            logger.info(f"[GEMINI] Conteúdo preparado: {json.dumps(contents, ensure_ascii=False, indent=2)}")
+            
+            logger.info("[GEMINI] Enviando requisição para a API...")
+            response = client.generate_content(contents=contents)
+            logger.info("[GEMINI] Resposta recebida da API")
         except Exception as api_error:
             logger.error(f"[GEMINI] Erro na API do Gemini: {api_error}")
             if "quota" in str(api_error).lower():
@@ -361,16 +356,23 @@ Recuse educadamente perguntas fora do escopo de SaaS, IaaS ou PaaS. Presuma que 
         if len(performance_metrics["gemini_response_times"]) > 100:
             performance_metrics["gemini_response_times"] = performance_metrics["gemini_response_times"][-100:]
         
+        logger.info(f"[GEMINI] Tempo de resposta: {response_time:.2f} segundos")
+        
         # Verificar se a resposta é válida
         if not hasattr(response, 'text') or not response.text:
             logger.error("[GEMINI] Resposta vazia ou inválida do Gemini")
+            logger.error(f"[GEMINI] Objeto de resposta: {response}")
             return "Erro: Resposta vazia do Gemini"
+        
+        # Log da resposta completa para debug
+        logger.info(f"[GEMINI] Resposta completa: {response.text}")
         
         # Validar tamanho da resposta
         if len(response.text) > 4000:
-            logger.warning("[GEMINI] Resposta muito longa, truncando...")
+            logger.warning(f"[GEMINI] Resposta muito longa ({len(response.text)} caracteres), truncando para 4000...")
             resposta_truncada = response.text[:4000] + "..."
             logger.info(f"[GEMINI] Resposta truncada obtida com sucesso")
+            logger.debug(f"[GEMINI] Parte removida da resposta: {response.text[4000:]}")
             return resposta_truncada
         else:
             logger.info(f"[GEMINI] Resposta obtida com sucesso ({len(response.text)} caracteres)")
@@ -394,39 +396,53 @@ async def enviar_mensagem_freshchat(conversation_id: str, mensagem: str):
     Raises:
         Exception: Se houver erro na comunicação com o Freshchat
     """
-    if not FRESHCHAT_API_TOKEN:
-        logger.error("[FRESHCHAT] Token não configurado")
-        raise Exception("Token do Freshchat não configurado")
-    
-    if not conversation_id:
-        logger.error("[FRESHCHAT] conversation_id não fornecido")
-        raise Exception("conversation_id é obrigatório")
-    
-    if not mensagem:
-        logger.error("[FRESHCHAT] Mensagem vazia")
+    # Validações extras
+    if not FRESHCHAT_API_TOKEN or len(FRESHCHAT_API_TOKEN) < 10:
+        logger.error("[FRESHCHAT] Token não configurado ou inválido")
+        raise Exception("Token do Freshchat não configurado ou inválido")
+
+    if not conversation_id or not isinstance(conversation_id, str) or len(conversation_id) < 10:
+        logger.error("[FRESHCHAT] conversation_id não fornecido ou inválido")
+        raise Exception("conversation_id é obrigatório e deve ser válido")
+
+    if not mensagem or not isinstance(mensagem, str) or len(mensagem.strip()) == 0:
+        logger.error("[FRESHCHAT] Mensagem vazia ou inválida")
         raise Exception("Mensagem não pode estar vazia")
-    
+
+    if len(mensagem) > 4000:
+        logger.warning("[FRESHCHAT] Mensagem muito longa, truncando para 4000 caracteres")
+        mensagem = mensagem[:4000]
+
     logger.info(f"[FRESHCHAT] Enviando mensagem para conversa {conversation_id}...")
     url = f"{FRESHCHAT_BASE_URL}/conversations/{conversation_id}/messages"
     headers = {
         "Authorization": f"Bearer {FRESHCHAT_API_TOKEN}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json"
     }
     payload = {
         "message_parts": [
-            {"text": mensagem, "content_type": "text"}
+            {"text": {"content": mensagem}}
         ],
-        "actor_type": "Agent"
+        "actor_type": "bot",
+        "message_type": "normal",
+        "actor_id": FRESHCHAT_API_TOKEN.split("-")[0]  # Usando a primeira parte do token como actor_id
     }
-    
+
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(url, headers=headers, json=payload)
             logger.info(f"[FRESHCHAT] Resposta da API: {response.status_code}")
-            
+
             if response.status_code == 200:
                 logger.info("[FRESHCHAT] Mensagem enviada com sucesso")
                 return response.json()
+            elif response.status_code == 202:
+                logger.info("[FRESHCHAT] Mensagem aceita para processamento")
+                return response.json()
+            elif response.status_code == 400:
+                logger.error(f"[FRESHCHAT] Requisição inválida: {response.text}")
+                raise Exception(f"Requisição inválida: {response.text}")
             elif response.status_code == 401:
                 logger.error("[FRESHCHAT] Token inválido ou expirado")
                 raise Exception("Token do Freshchat inválido ou expirado")
@@ -436,10 +452,16 @@ async def enviar_mensagem_freshchat(conversation_id: str, mensagem: str):
             elif response.status_code == 404:
                 logger.error("[FRESHCHAT] Conversa não encontrada")
                 raise Exception("Conversa não encontrada no Freshchat")
+            elif response.status_code == 429:
+                logger.error("[FRESHCHAT] Limite de requisições excedido")
+                raise Exception("Limite de requisições excedido no Freshchat")
+            elif response.status_code in [500, 503]:
+                logger.error(f"[FRESHCHAT] Erro interno do Freshchat: {response.text}")
+                raise Exception(f"Erro interno do Freshchat: {response.text}")
             else:
-                logger.error(f"[FRESHCHAT] Erro HTTP: {response.status_code}")
+                logger.error(f"[FRESHCHAT] Erro HTTP: {response.status_code} - {response.text}")
                 response.raise_for_status()
-                
+
     except httpx.TimeoutException:
         logger.error("[FRESHCHAT] Timeout ao enviar mensagem")
         raise Exception("Timeout ao enviar mensagem para Freshchat")
@@ -473,39 +495,21 @@ async def receber_freshbot(
         
         dados_json = await request.json()
         try:
+            # Generate a unique ID for history lookup
+            search_id = f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{os.urandom(4).hex()}"
+            dados_json['search_id'] = search_id
             dados = DadosRecebidos(**dados_json)
         except ValidationError as ve:
             logger.error(f"[PUT] Dados inválidos recebidos: {ve}")
             return JSONResponse(status_code=400, content={"erro": "Dados inválidos", "detalhes": ve.errors()})
         
         logger.info(f"[PUT] Dados recebidos: {dados}")
-        logger.info(f"[PUT] id_usuario: {dados.id_usuario}")
-        logger.info(f"[PUT] id_conversa: {dados.id_conversa}")
         logger.info(f"[PUT] solicitante: {dados.solicitante}")
         logger.info(f"[PUT] contexto: {dados.contexto}")
         logger.info(f"[PUT] pergunta: {dados.pergunta}")
         
-        # Loga todos os dados recebidos (log geral)
-        try:
-            with FileLock("log_entradas.txt.lock"):
-                with open("log_entradas.txt", "a", encoding="utf-8") as log_file:
-                    log_file.write(f"[{datetime.datetime.now()}] {dados_json}\n")
-            logger.info("[PUT] Dados logados em log_entradas.txt")
-        except Exception as e:
-            logger.error(f"[PUT] Erro ao logar dados: {e}")
-        
-        # Salva todos os dados recebidos em um arquivo separado, em formato JSON
-        try:
-            with FileLock("dados_recebidos.txt.lock"):
-                with open("dados_recebidos.txt", "a", encoding="utf-8") as dados_file:
-                    dados_file.write(json.dumps(dados_json, ensure_ascii=False) + "\n")
-            logger.info("[PUT] Dados salvos em dados_recebidos.txt: %s", dados_json)
-        except Exception as e:
-            logger.error("[PUT][ERRO] Erro ao salvar dados: %s", e)
-            raise
-        
         # Salva o histórico separado por solicitante em formato JSON válido, dentro da pasta 'historicos'
-        solicitante = dados.solicitante or "desconhecido"
+        solicitante = dados.solicitante
         nome_arquivo = os.path.join(pasta_historicos, f"historico_{solicitante}.json")
         try:
             with FileLock(nome_arquivo + ".lock"):
@@ -524,18 +528,6 @@ async def receber_freshbot(
             logger.error("[PUT][ERRO] Erro ao salvar histórico do solicitante: %s", e)
             raise
         
-        # Extrai e salva IDs (prioriza id_usuario, depois user_id)
-        user_id_to_process = dados.id_usuario or dados.user_id
-        ids = re.findall(r"\d{7,}", user_id_to_process) if user_id_to_process else []
-        try:
-            with FileLock("ids_salvos.txt.lock"):
-                with open("ids_salvos.txt", "a") as f:
-                    for user_id in ids:
-                        f.write(user_id + "\n")
-            logger.info(f"[PUT] IDs extraídos e salvos: {ids}")
-        except Exception as e:
-            logger.error(f"[PUT] Erro ao salvar IDs: {e}")
-        
         # Atualizar métricas
         performance_metrics["total_requests"] += 1
         
@@ -546,6 +538,13 @@ async def receber_freshbot(
                 if resposta and not resposta.startswith("Erro:"):
                     performance_metrics["successful_requests"] += 1
                     logger.info("[PUT] Consulta ao Gemini processada com sucesso")
+                    
+                    # Enviar resposta para o Freshchat
+                    try:
+                        await enviar_mensagem_freshchat(dados.id_conversa, resposta)
+                        logger.info("[PUT] Resposta enviada para o Freshchat com sucesso")
+                    except Exception as fresh_error:
+                        logger.error(f"[PUT] Erro ao enviar resposta para Freshchat: {fresh_error}")
                 else:
                     performance_metrics["failed_requests"] += 1
                     logger.error(f"[PUT] Erro na consulta ao Gemini: {resposta}")
@@ -558,11 +557,9 @@ async def receber_freshbot(
         
         return JSONResponse(content={
             "message": "Sua solicitação está sendo analisada. Aguarde a resposta.",
-            "ids_extraidos": ids,
+            "search_id": dados.search_id,
             "contexto_recebido": dados.contexto,
             "pergunta_recebida": dados.pergunta,
-            "id_usuario": dados.id_usuario,
-            "conversation_id": dados.id_conversa,
             "solicitante": dados.solicitante
         })
         
@@ -572,60 +569,104 @@ async def receber_freshbot(
         logger.error(f"[PUT][ERRO] Erro inesperado: {e}")
         return JSONResponse(status_code=500, content={"erro": "Erro interno do servidor"})
 
-@app.post("/webhook/freshbot")
-async def enviar_freshbot(request: Request, background_tasks: BackgroundTasks):
+@app.get("/webhook/freshbot/{search_id}")
+async def buscar_resposta(search_id: str, background_tasks: BackgroundTasks):
     """
-    Endpoint POST para enviar dados processados para o Freshbot.
-    Processa a resposta do Gemini e envia para o Freshchat.
+    Endpoint GET para buscar resposta armazenada no histórico.
+    Busca a resposta pelo ID de busca e envia para o Freshchat.
     """
     try:
-        logger.info("[POST] Recebendo solicitação em /webhook/freshbot")
-        verificar_rate_limit(request)
-        
-        dados_json = await request.json()
+        logger.info(f"[GET] Buscando resposta para search_id: {search_id}")
+
+        # Procurar em todos os arquivos de histórico
+        resposta_encontrada = None
+        historico_path = None
+        for filename in os.listdir(pasta_historicos):
+            if filename.endswith('.json'):
+                file_path = os.path.join(pasta_historicos, filename)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        historico = json.load(f)
+                        for item in historico:
+                            if isinstance(item, dict) and item.get('search_id') == search_id:
+                                resposta_encontrada = item
+                                historico_path = file_path
+                                break
+                    if resposta_encontrada:
+                        break
+                except Exception as e:
+                    logger.error(f"[GET] Erro ao ler arquivo {filename}: {e}")
+                    continue
+
+        if not resposta_encontrada:
+            logger.warning(f"[GET] Resposta não encontrada para search_id: {search_id}")
+            return JSONResponse(
+                status_code=404,
+                content={"erro": "Resposta não encontrada"}
+            )
+
+        # Validar dados encontrados
         try:
-            dados = DadosRecebidos(**dados_json)
+            dados = DadosRecebidos(**resposta_encontrada)
         except ValidationError as ve:
-            logger.error(f"[POST] Dados inválidos recebidos: {ve}")
-            return JSONResponse(status_code=400, content={"erro": "Dados inválidos", "detalhes": ve.errors()})
-        
-        logger.info(f"[POST] Dados recebidos: {dados}")
-        
-        # Validar dados obrigatórios
+            logger.error(f"[GET] Dados inválidos encontrados: {ve}")
+            return JSONResponse(
+                status_code=500,
+                content={"erro": "Dados inválidos no histórico", "detalhes": ve.errors()}
+            )
+
         if not dados.resposta_gemini:
-            logger.warning("[POST] resposta_gemini não fornecida")
-            return JSONResponse(status_code=400, content={"erro": "resposta_gemini é obrigatória"})
-        
-        if not dados.user_id and not dados.id_usuario:
-            logger.warning("[POST] user_id ou id_usuario não fornecidos")
-            return JSONResponse(status_code=400, content={"erro": "user_id ou id_usuario é obrigatório"})
-        
-        # Usar user_id ou id_usuario como conversation_id
-        conversation_id = dados.user_id or dados.id_usuario
-        
-        async def tarefa_envio_freshchat():
+            logger.warning("[GET] Resposta Gemini não encontrada no histórico")
+            return JSONResponse(
+                status_code=404,
+                content={"erro": "Resposta Gemini não encontrada"}
+            )
+
+        # Enviar resposta encontrada para o Freshchat
+        conversation_id = dados.id_conversa
+        if not conversation_id:
+            logger.error("[GET] ID de conversa não encontrado nos dados")
+            return JSONResponse(
+                status_code=400,
+                content={"erro": "ID de conversa não encontrado"}
+            )
+
+        async def tarefa_envio_resposta():
             try:
-                start_time = datetime.datetime.now()
                 await enviar_mensagem_freshchat(conversation_id, dados.resposta_gemini)
-                end_time = datetime.datetime.now()
+                logger.info(f"[GET] Resposta enviada com sucesso para conversation_id: {conversation_id}")
                 
-                # Registrar métrica de performance
-                response_time = (end_time - start_time).total_seconds()
-                performance_metrics["freshchat_response_times"].append(response_time)
-                if len(performance_metrics["freshchat_response_times"]) > 100:
-                    performance_metrics["freshchat_response_times"] = performance_metrics["freshchat_response_times"][-100:]
+                # Remover o item do histórico após envio bem-sucedido
+                if historico_path:
+                    try:
+                        with FileLock(f"{historico_path}.lock"):
+                            with open(historico_path, 'r', encoding='utf-8') as f:
+                                historico = json.load(f)
+                            
+                            # Remover o item com o search_id especificado
+                            historico = [item for item in historico if item.get('search_id') != search_id]
+                            
+                            with open(historico_path, 'w', encoding='utf-8') as f:
+                                json.dump(historico, f, ensure_ascii=False, indent=2)
+                            
+                            logger.info(f"[GET] Item removido do histórico: {search_id}")
+                    except Exception as e:
+                        logger.error(f"[GET] Erro ao remover item do histórico: {e}")
                 
-                logger.info("[POST] Mensagem enviada para Freshchat com sucesso.")
             except Exception as e:
-                logger.error(f"[POST][ERRO] Erro ao enviar mensagem para Freshchat: {e}")
-        
-        background_tasks.add_task(tarefa_envio_freshchat)
-        return JSONResponse(content={"message": "Mensagem enviada para Freshchat com sucesso."})
-        
+                logger.error(f"[GET] Erro ao enviar resposta para Freshchat: {e}")
+
+        background_tasks.add_task(tarefa_envio_resposta)
+        return JSONResponse(content={
+            "message": "Resposta encontrada e sendo enviada para o Freshchat",
+            "search_id": search_id,
+            "conversation_id": conversation_id
+        })
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[POST][ERRO] Erro inesperado: {e}")
+        logger.error(f"[GET][ERRO] Erro inesperado: {e}")
         return JSONResponse(status_code=500, content={"erro": "Erro interno do servidor"})
 
 # =====================
