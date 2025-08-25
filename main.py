@@ -16,20 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ValidationError, Field, field_validator
 from filelock import FileLock
 from dotenv import load_dotenv
-from google import genai
-
-# Teste de import mais robusto
-try:
-    from google.genai import GenerativeModel
-    HAS_GENERATIVE_MODEL = True
-except ImportError as e:
-    HAS_GENERATIVE_MODEL = False
-
-try:
-    from google.genai import Client
-    HAS_CLIENT = True
-except ImportError as e:
-    HAS_CLIENT = False
+import google.generativeai as genai
 
 # =====================
 # LOGGING E VARIÁVEIS DE AMBIENTE
@@ -59,7 +46,7 @@ else:
 TOKEN_ESPERADO = os.environ.get("TOKEN_ESPERADO", "RLjUoIUiajoI8Ss33WATbH3-KDhIkpAlNUmPjDIhQ7k")
 FRESHCHAT_API_TOKEN = os.environ.get("FRESHCHAT_API_TOKEN", "")
 FRESHCHAT_BASE_URL = os.environ.get("FRESHCHAT_BASE_URL", "https://api.freshchat.com/v2")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # Configurações de rate limiting
 MAX_REQUESTS_PER_MINUTE = int(os.environ.get("MAX_REQUESTS_PER_MINUTE", "60"))
@@ -70,6 +57,7 @@ logger.info(f"[SETUP] FRESHCHAT_BASE_URL: {FRESHCHAT_BASE_URL}")
 logger.info(f"[SETUP] MAX_REQUESTS_PER_MINUTE: {MAX_REQUESTS_PER_MINUTE}")
 logger.info(f"[SETUP] TOKEN_ESPERADO: {'***CONFIGURADO***' if TOKEN_ESPERADO else 'NÃO CONFIGURADO'}")
 logger.info(f"[SETUP] FRESHCHAT_API_TOKEN: {'***CONFIGURADO***' if FRESHCHAT_API_TOKEN else 'NÃO CONFIGURADO'}")
+logger.info(f"[SETUP] GEMINI_API_KEY: {'***CONFIGURADO***' if GEMINI_API_KEY else 'NÃO CONFIGURADO'}")
 logger.info(f"[SETUP] GEMINI_API_KEY: {'***CONFIGURADO***' if GEMINI_API_KEY else 'NÃO CONFIGURADO'}")
 
 app = FastAPI(
@@ -102,27 +90,57 @@ performance_metrics = {
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
+        
+        # Configurações do modelo
+        safety_settings = [
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_HATE_SPEECH",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+        ]
+        
         generation_config = {
             "temperature": 0.4,
+            "candidate_count": 1,
             "top_k": 20,
             "top_p": 0.8,
             "max_output_tokens": 2048,
         }
-        client = genai.GenerativeModel(model_name="gemini-pro",
-                                     generation_config=generation_config)
+        
+        model = genai.GenerativeModel(
+            model_name="gemini-pro",
+            generation_config=generation_config,
+            safety_settings=safety_settings
+        )
+        
         # Teste inicial para verificar se o cliente está funcionando
-        response = client.generate_content("Teste de conexão")
+        response = model.generate_content("Olá, isto é um teste de conexão.")
+        
         if response and hasattr(response, 'text'):
             logger.info("[SETUP] Cliente Gemini configurado e testado com sucesso!")
+            client = model
         else:
             logger.error("[SETUP] Cliente Gemini configurado mas teste falhou")
             client = None
+            
     except Exception as e:
         logger.error(f"[SETUP] Erro ao configurar cliente Gemini: {e}")
         client = None
 else:
-    client = None
     logger.warning("[SETUP] GEMINI_API_KEY não definida. A integração com Gemini não funcionará.")
+    client = None
 
 # Verificação de variáveis críticas
 if not FRESHCHAT_API_TOKEN:
@@ -138,7 +156,7 @@ class DadosRecebidos(BaseModel):
     resposta_gemini: str = Field(default="", max_length=4000)
     search_id: str = Field(default="", max_length=50)
     
-    @field_validator('solicitante', 'contexto', 'pergunta', 'user_id', 'id_usuario', 'id_conversa', 'resposta_gemini', 'url')
+    @field_validator('solicitante', 'contexto', 'pergunta', 'resposta_gemini', 'search_id')
     @classmethod
     def sanitize_strings(cls, v):
         """Sanitiza strings removendo caracteres perigosos"""
