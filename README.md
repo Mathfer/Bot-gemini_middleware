@@ -4,16 +4,7 @@ Middleware para integração entre Freshchat e Google Gemini AI, desenvolvido em
 
 ## 🚀 URL Pública
 
-Este projeto pode ser facilmente exposto com uma URL pública sem precisar do ngrok. Veja as opções:
-
-### Opções de Deploy:
-- **Cloudflare Tunnel** (Recomendado): Gratuito, URL permanente, sem serviços externos
-- **Seu Próprio VPS**: Controle total, custo baixo (~$5/mês)
-- **Port Forwarding**: Gratuito, controle total, requer configuração de rede
-- **ngrok**: Simples, gratuito, URL temporária
-
-📖 **Guia completo de deploy**: [DEPLOY.md](DEPLOY.md)
-📖 **Opções locais sem serviços externos**: [OPCOES_LOCAIS.md](OPCOES_LOCAIS.md)
+https://bot-gemini-152892554473.southamerica-east1.run.app/
 
 ## Funcionalidades
 
@@ -80,29 +71,15 @@ Recebe dados do Freshchat e inicia processamento em background.
 **Body (JSON):**
 ```json
 {
-  "solicitante": "nome_do_usuario",
-  "contexto": "contexto_da_conversa",
-  "pergunta": "pergunta_do_usuario",
-  "user_id": "id_do_usuario",
-  "resposta_gemini": "",
-  "url": "url_opcional"
+    "solicitante": "TESTE",
+    "contexto": "teste",
+    "pergunta": "isso é um teste"
 }
 ```
 
-### POST /webhook/freshbot
-Processa resposta do Gemini e envia para o Freshchat.
+### GET /webhook/freshbot/search_id
+Pega a resposta do Gemini e envia para o Freshchat.
 
-**Body (JSON):**
-```json
-{
-  "solicitante": "nome_do_usuario",
-  "contexto": "contexto_da_conversa",
-  "pergunta": "pergunta_do_usuario",
-  "user_id": "id_do_usuario",
-  "resposta_gemini": "resposta_do_gemini",
-  "url": "url_opcional"
-}
-```
 
 ### GET /health
 Verificação de saúde da aplicação.
